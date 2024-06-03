@@ -67,7 +67,7 @@ const updateSubscription = async (req, res) => {
     res.json({
         username,
         email,
-        subscription,
+        subscription: result.subscription,
     });
 };
 
