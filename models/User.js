@@ -3,10 +3,6 @@ import { handleSaveError, setUpdateSettings } from './hooks.js';
 import { emailRegexp, subscriptionList } from '../constants/user-constants.js';
 
 const userSchema = new Schema({
-    username: {
-        type: String,
-        required: [true, 'User must have username'],
-    },
     email: {
         type: String,
         unique: true,
