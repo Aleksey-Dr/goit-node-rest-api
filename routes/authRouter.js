@@ -5,6 +5,7 @@ import isEmptyBody from '../middlewares/isEmptyBody.js';
 import validateBody from '../helpers/validateBody.js';
 import isValidId from '../middlewares/isValidId.js';
 import authenticate from '../middlewares/authenticate.js';
+import upload from '../middlewares/upload.js';
 
 import { authSignupSchema, authLoginSchema, subscriptionSchema } from '../schemas/authSchemas.js';
 
@@ -18,6 +19,8 @@ authRouter.get('/current', authenticate, authControllers.getCurrent);
 
 authRouter.post('/logout', authenticate, authControllers.logout);
 
-authRouter.patch('/:id/subscription', isValidId, authenticate, validateBody(subscriptionSchema), authControllers.updateSubscription);
+authRouter.patch('/subscription', isValidId, authenticate, validateBody(subscriptionSchema), authControllers.updateSubscription);
+
+authRouter.patch("/avatars", authenticate, upload.single('avatar'), authControllers.updateAvatar);
 
 export default authRouter;
