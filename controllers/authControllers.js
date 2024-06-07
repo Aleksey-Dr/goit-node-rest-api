@@ -1,6 +1,8 @@
 import fs from 'fs/promises';
 import path from 'path';
 
+import 'dotenv/config';
+import { nanoid } from 'nanoid';
 import gravatar from 'gravatar';
 import Jimp from "jimp";
 
@@ -8,9 +10,14 @@ import * as authServices from '../services/authServices.js';
 
 import HttpError from '../helpers/HttpError.js';
 import compareHash from '../helpers/compareHash.js';
+import transport from '../helpers/transport.js';
 import ctrlWrapper from "../decorators/controllerWrapper.js";
 
 import { createToken } from '../helpers/jwt.js';
+
+const { META_FROM, BASE_URL } = process.env;
+
+const verificationToken = nanoid();
 
 const avatarPath = path.resolve('public', 'avatars');
 
@@ -21,7 +28,40 @@ const signup = async(req, res) => {
         throw HttpError(409, 'Email in use');
     }
     const avatarURL = gravatar.url(email, {protocol: 'https', s: '250'});
-    const newUser = await authServices.saveUser({ ...req.body, avatarURL });
+    const newUser = await authServices.saveUser({ ...req.body, verificationToken, avatarURL });
+
+    const verifyEmail = {
+        from: META_FROM,
+        to: email,
+        subject: 'Verify email',
+        html: `<div>
+                  <a
+                    target="_blank"
+                    href="${BASE_URL}/api/users/verify/${verificationToken}"
+                    style="
+                      box-sizing: border-box;
+                      display: block;
+                      width: 160px;
+                      height: 50px;
+                      padding: 12px;
+                      margin: auto;
+                      text-decoration: none;
+                      background-color: #13AA52;
+                      border: 1px solid #212121;
+                      border-radius: 4px;
+                      text-align: center;
+                      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                      font-size: 18px;
+                      color: #ffffff;"
+                  >
+                    Verify Email
+                  </a>
+                </div>`,
+    };
+    await transport
+        .sendMail(verifyEmail)
+        .then(() => console.log('Email send success'))
+        .catch(error => console.log(error.message));
     res.status(201).json({
         user: {
             email,
@@ -31,11 +71,73 @@ const signup = async(req, res) => {
     });
 };
 
+const verifyEmail = async (req, res) => {
+    const { verificationToken } = req.params;
+    const user = await authServices.findUser({ verificationToken });
+    if (!user) {
+        throw HttpError(404, 'User not found');
+    }
+    await authServices.updateUserStatus(user._id, { verify: true, verificationToken: 'null' });
+    res.json({
+        message: 'Verification successful',
+    });
+};
+
+const resendVerify = async (req, res) => {
+    const { email } = req.body;
+    if (!email) {
+        throw HttpError(400, "missing required field email");
+    }
+    const user = await authServices.findUser({ email });
+    if (!user) {
+        throw HttpError(404, "Email not found");
+    }
+    if (user.verify) {
+        throw HttpError(400, "Verification has already been passed");
+    }
+    const verifyEmail = {
+        from: META_FROM,
+        to: email,
+        subject: 'Verify email',
+        html: `<div>
+                  <a
+                    target="_blank"
+                    href="${BASE_URL}/api/users/verify/${verificationToken}"
+                    style="
+                      box-sizing: border-box;
+                      display: block;
+                      width: 160px;
+                      height: 50px;
+                      padding: 12px;
+                      margin: auto;
+                      text-decoration: none;
+                      background-color: #13AA52;
+                      border: 1px solid #212121;
+                      border-radius: 4px;
+                      text-align: center;
+                      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                      font-size: 18px;
+                      color: #ffffff;"
+                  >
+                    Verify Email
+                  </a>
+                </div>`,
+    };
+    await transport
+        .sendMail(verifyEmail)
+        .then(() => console.log('Email send success'))
+        .catch(error => console.log(error.message));
+    res.json({ message: "Verification email sent" });
+};
+
 const login = async(req, res) => {
     const { email, password } = req.body;
     const user = await authServices.findUser({ email });
     if(!user) {
         throw HttpError(401, 'Email or password is wrong');
+    }
+    if (!user.verify) {
+        throw HttpError(401, `Your email ${email} is not verified`);
     }
     const comparePassword = await compareHash(password, user.password);
     if(!comparePassword){
@@ -73,7 +175,7 @@ const logout = async(req, res) => {
 const updateSubscription = async (req, res) => {
     const { id: _id } = req.params;
     const { username, email } = req.user;
-    const result = await authServices.updateStatusSubscription({ _id }, req.body);
+    const result = await authServices.updateUserStatus({ _id }, req.body);
     if (!result) {
         throw HttpError(404, `User with id=${id} not found`);
     }
@@ -86,7 +188,6 @@ const updateSubscription = async (req, res) => {
 
 const updateAvatar = async (req, res) => {
     const { _id } = req.user;
-    console.log(_id);
     if (!req.file) {
         return res.status(400).json({ message: 'File is required' });
     }
@@ -112,6 +213,8 @@ const updateAvatar = async (req, res) => {
 
 export default {
     signup: ctrlWrapper(signup),
+    verifyEmail: ctrlWrapper(verifyEmail),
+    resendVerify: ctrlWrapper(resendVerify),
     login: ctrlWrapper(login),
     getCurrent: ctrlWrapper(getCurrent),
     logout: ctrlWrapper(logout),

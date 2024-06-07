@@ -7,11 +7,15 @@ import isValidId from '../middlewares/isValidId.js';
 import authenticate from '../middlewares/authenticate.js';
 import upload from '../middlewares/upload.js';
 
-import { authSignupSchema, authLoginSchema, subscriptionSchema } from '../schemas/authSchemas.js';
+import { authSignupSchema, emailSchema, authLoginSchema, subscriptionSchema } from '../schemas/authSchemas.js';
 
 const authRouter = express.Router();
 
 authRouter.post('/register', isEmptyBody, validateBody(authSignupSchema), authControllers.signup);
+
+authRouter.get('/verify/:verificationToken', authControllers.verifyEmail);
+
+authRouter.post('/verify', validateBody(emailSchema), authControllers.resendVerify);
 
 authRouter.post('/login', isEmptyBody, validateBody(authLoginSchema), authControllers.login);
 
